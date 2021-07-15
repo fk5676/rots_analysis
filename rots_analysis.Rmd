@@ -1,0 +1,128 @@
+---
+title: "RoTS verification"
+author: "G D"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("rots_analysis.R")
+```
+
+### Raw data used
+
+The raw data used consists of a limited dataset of 26 samples, 13 "schudproeven" (SP) and 13 "kolomproeven" (KP). Data is lifted from Table 10 (p.22 and 23) of memo OWV7-ATL-NOT-013.
+
+```{r read_data, echo = FALSE, message=FALSE}
+# tabulate the data
+knitr::kable(df %>% filter(set == "full") %>% select(-set),
+             caption = "",
+             col.names = c("Schudproef / kolomproef",
+                           "monster nummer",
+                           "Uitloging ($\\mu$g/l)",
+                           "Concentratie gidsparameter ($\\mu$g/kg ds)"))
+```
+
+### Summary statistics full dataset
+
+Note the inconsistencies with values reported in the original memo where the mean
+"gidsparameter" value is set to be 152.08 rather than 179.85.
+
+```{r summary_stats, echo = FALSE}
+knitr::kable(st,
+             col.names = c("Summary statistic",
+                           "Uitloging ($\\mu$g/l)",
+                           "Concentratie gidsparameter ($\\mu$g/kg ds)"))
+```
+### Summary statistics limited dataset
+
+The limited dataset consists of all samples with "uitloging" concentrations of less than 10$\mu$g/l.
+
+```{r summary_stats_limited, echo = FALSE}
+knitr::kable(st_limited,
+              col.names = c("Summary statistic",
+                           "Uitloging ($\\mu$g/l)",
+                           "Concentratie gidsparameter ($\\mu$g/kg ds)"))
+```
+
+### Empirical model fits as reported
+
+```{r echo = FALSE, message = FALSE}
+knitr::kable(parameters_rots
+             %>% select(proef, set, a, b, r_squared, func),
+             col.names = c("Schudproef / Kolomproef (or combined)",
+                           "set (limited <10 $\\mu$g/l uitloging)",
+                           "a",
+                           "b",
+                           "R2",
+                           "functional form"))
+```
+
+### Empirical model fits as calculated
+
+Data were fit using an exponential and power curve, on both SP and KP groups separately or combined. Assuming processing using a spreadsheet linearized (log transformed) data was used
+to estimate parameters a and b for both functional forms.
+
+```{r echo = FALSE}
+# fit parameter reporting
+knitr::kable(parameters %>% select(proef, set, a, b, r_squared, func),
+             col.names = c("Schudproef / Kolomproef (or combined)",
+                           "set (limited <10 $\\mu$g/l uitloging)",
+                           "a",
+                           "b",
+                           "R2",
+                           "functional form"))
+```
+
+### Differences in model fits
+
+Differences in parameters between recalculated fits and reported values are minimal, can be attributed to rounding errors and small mis-reporting of values.
+
+```{r echo = FALSE}
+# fit parameter reporting
+knitr::kable(parameters_diff,
+             col.names = c("Schudproef / Kolomproef (or combined)",
+                           "set (limited <10 $\\mu$g/l uitloging)",
+                           "$\\Delta$a (analysis - memo)",
+                           "$\\Delta$b (analysis - memo)",
+                           "R2",
+                           "functional form"))
+```
+
+
+### Soil concentrations using the above empirical fits (memo)
+
+Given equivalence between re-analysis data and provided parameters the provided parameters are used.
+
+```{r echo = FALSE}
+# temporary plotting file
+# pivot to long format for
+# ggplot visuals
+tmp <- parameters_rots %>%
+    pivot_longer(
+        cols = ends_with("_conc"),
+        values_to = "concentration",
+        names_to = "standard")
+
+ggplot(tmp) +
+  geom_point(
+    aes(
+      concentration,
+      standard,
+      colour = func
+    )
+  ) +
+  geom_vline(
+    xintercept = 70,
+    colour = "grey50"
+  ) +
+  labs(
+    x = expression("soil concentration ("* mu * "g/kg ds)"),
+    y = "",
+    caption = "maximum soil concentrations of PFOS
+              depending on the standards used"
+  ) +
+  theme_minimal() +
+  facet_grid(proef ~ set)
+```
