@@ -23,7 +23,7 @@ summary_stats <- function(x){
   relocate(gidsparameter, .after = uitloging)
 }
 
-df <- readr::read_csv("data/data_rots.csv") %>%
+df <- readr::read_csv("data_rots.csv") %>%
   as_tibble()
 
 # tabulate the data
@@ -50,7 +50,7 @@ st_limited <- df %>%
 
 # read in rots parameters
 # read in the data
-parameters_rots <- readr::read_csv("data/parameters_rots.csv") %>%
+parameters_rots <- readr::read_csv("parameters_rots.csv") %>%
   as_tibble()
 
 # adds a column identifying the set as "complete"

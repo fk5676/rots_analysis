@@ -1,0 +1,13 @@
+proef,set,a,b,r_squared,func
+KP,full,28.289,0.5802,0.65,power
+SP,full,32.497,0.623,0.68,power
+KP + SP,full,30.263,0.6026,0.66,power
+KP,full,35.513,0.0431,0.3,exp
+SP,full,34.401,0.054,0.45,exp
+KP + SP,full,34.73,0.0492,0.38,exp
+KP,limited,29.344,0.936,0.73,power
+SP,limited,35.649,0.8102,0.68,power
+KP + SP,limited,32.467,0.8572,0.7,power
+KP,limited,12.722,0.4703,0.65,exp
+SP,limited,16.989,0.3132,0.57,exp
+KP + SP,limited,15.71,0.3494,0.58,exp
