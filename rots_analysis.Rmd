@@ -2,7 +2,9 @@
 title: "RoTS verification"
 author: "G D"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -99,17 +101,12 @@ Given equivalence between re-analysis data and provided parameters the provided 
 # temporary plotting file
 # pivot to long format for
 # ggplot visuals
-tmp <- parameters_rots %>%
-    pivot_longer(
-        cols = ends_with("_conc"),
-        values_to = "concentration",
-        names_to = "standard")
 
-ggplot(tmp) +
+ggplot(parameters_rots_results) +
   geom_point(
     aes(
+      results,
       concentration,
-      standard,
       colour = func
     )
   ) +
@@ -126,3 +123,109 @@ ggplot(tmp) +
   theme_minimal() +
   facet_grid(proef ~ set)
 ```
+
+### Model selection
+
+Standard model selection using an AIC (all are linear models so only dependent on residuals and number of values used).
+
+```{r echo = FALSE}
+# fit parameter reporting
+knitr::kable(aic_test %>%
+               arrange(AIC) %>%
+               select(-a,-b) %>%
+               mutate(across(where(is.numeric), round, 2)),
+             col.names = c("Schudproef / Kolomproef (or combined)",
+                           "set (limited <10 $\\mu$g/l uitloging)",
+                           "R2",
+                           "AIC",
+                           "functional form",
+                           "Soil concentration ($\\mu$g/kg ds)"))
+```
+
+
+### Full functional responses
+
+```{r  echo = FALSE, warning = FALSE}
+# full line graph
+conc <- seq(0, 60, 0.1)
+
+df_full <- df %>%
+  mutate(
+    proef = "KP + SP"
+  )
+
+df_results <- bind_rows(df, df_full)
+
+m <- matrix(
+  rep(conc, nrow(parameters_rots)),
+  nrow(parameters_rots),
+  length(conc),
+  byrow = TRUE)
+colnames(m) <- paste0("int_",1:length(conc),"_conc")
+
+tmp <- cbind(parameters_rots, m)
+
+parameters_rots <- tmp %>%
+  pivot_longer(
+    cols = contains("_conc"),
+    values_to = "concentration",
+    names_to = "standard") %>%
+  mutate(
+    results = round(
+      ifelse(func == "power",
+             a * concentration ^ b,
+             a * exp(concentration * b))
+    )
+  )
+
+p <- ggplot() +
+  geom_point(
+    data = df_results,
+    aes(
+      uitloging,
+      gidsparameter
+    )
+  ) +
+  geom_line(
+    data = parameters_rots %>% filter(
+      grepl("int", standard)
+    ),
+    aes(
+      concentration,
+      results,
+      colour = func
+    )
+  ) +
+  geom_point(
+    data = parameters_rots %>% filter(
+      !grepl("int", standard)
+    ),
+    aes(
+      concentration,
+      results,
+      colour = func
+    )
+  ) +
+  geom_hline(
+    yintercept = 70,
+    colour = "grey50"
+  ) +
+  scale_colour_discrete(
+  ) +
+  ylim(0,600) +
+  labs(
+    y = expression("soil concentration ("* mu * "g/kg ds)"),
+    x = expression("effluent ("* mu * "g/l)"),
+    caption = "maximum soil concentrations of PFOS
+              depending on the standards used"
+  ) +
+  theme(
+    legend.position = "bottom"
+  ) +
+  theme_minimal() +
+  facet_grid(proef ~ set)
+
+print(p)
+
+```
+

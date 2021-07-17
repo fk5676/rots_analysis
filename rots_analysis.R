@@ -26,22 +26,9 @@ summary_stats <- function(x){
 df <- readr::read_csv("data_rots.csv") %>%
   as_tibble()
 
-# tabulate the data
-knitr::kable(df,
-             caption = "",
-             col.names = c("Schudproef / kolomproef",
-                           "monster nummer",
-                           "Uitloging ($\\mu$g/l)",
-                           "Concentratie gidsparameter ($\\mu$g/kg ds)"))
-
 # simple stats
 st <- df %>%
   summary_stats()
-
-knitr::kable(st,
-             col.names = c("Summary statistic",
-                           "Uitloging ($\\mu$g/l)",
-                           "Concentratie gidsparameter ($\\mu$g/kg ds)"))
 
 # simple stats
 st_limited <- df %>%
@@ -79,6 +66,7 @@ power <- df %>%
       data = data)
     tidy <- tidy(fit)
     tidy$r.squared <- glance(fit)$r.squared
+    tidy$AIC <- glance(fit)$AIC
     tidy
   })
 
@@ -92,6 +80,22 @@ exp <- df %>%
       data = data)
     tidy <- tidy(fit)
     tidy$r.squared <- glance(fit)$r.squared
+    tidy$AIC <- glance(fit)$AIC
+    tidy
+  })
+
+# linear fit (no transformations of parameters)
+# basic model
+lin <- df %>%
+  group_by(proef, set) %>%
+  do({
+    data <- .
+    fit <- lm(
+      gidsparameter ~ uitloging,
+      data = data)
+    tidy <- tidy(fit)
+    tidy$r.squared <- glance(fit)$r.squared
+    tidy$AIC <- glance(fit)$AIC
     tidy
   })
 
@@ -106,6 +110,7 @@ power_combined <- df %>%
       data = data)
     tidy <- tidy(fit)
     tidy$r.squared <- glance(fit)$r.squared
+    tidy$AIC <- glance(fit)$AIC
     tidy
   })
 
@@ -119,13 +124,28 @@ exp_combined <- df %>%
       data = data)
     tidy <- tidy(fit)
     tidy$r.squared <- glance(fit)$r.squared
+    tidy$AIC <- glance(fit)$AIC
+    tidy
+  })
+
+lin_combined <- df %>%
+  group_by(set) %>%
+  do({
+    data <- .
+    fit <- lm(
+      gidsparameter ~ uitloging,
+      data = data)
+    tidy <- tidy(fit)
+    tidy$r.squared <- glance(fit)$r.squared
+    tidy$AIC <- glance(fit)$AIC
     tidy
   })
 
 # combine power and exponential results
 power <- bind_rows(power, power_combined)
 exp <- bind_rows(exp, exp_combined)
-
+lin <- bind_rows(lin, lin_combined)
+  
 # replace terms for clarity
 # and back-convert parameters from their linear form
 power <- power %>%
@@ -133,36 +153,73 @@ power <- power %>%
     term = ifelse(grepl("uitloging",term),"b","a"),
     estimate = ifelse(term == "a", exp(estimate), estimate)
   ) %>%
-  select(proef, set, term, estimate, r.squared) %>%
+  select(proef, set, term, estimate, r.squared, AIC) %>%
   pivot_wider(names_from = c(term),
-              values_from = c(estimate, r.squared)) %>%
+              values_from = c(estimate, r.squared, AIC)) %>%
   mutate(
     func = "power"
   ) %>%
   rename(
     'r_squared' = 'r.squared_a',
+    'AIC' = 'AIC_a',
     'a' = 'estimate_a',
     'b' = 'estimate_b'
   ) %>%
-  select(-r.squared_b)
+  select(-r.squared_b, -AIC_b)
 
 exp <- exp %>%
   mutate(
     term = ifelse(grepl("uitloging",term),"b","a"),
     estimate = ifelse(term == "a", exp(estimate), estimate)
   ) %>%
-  select(proef, set, term, estimate, r.squared) %>%
+  select(proef, set, term, estimate, r.squared, AIC) %>%
   pivot_wider(names_from = c(term),
-              values_from = c(estimate,r.squared)) %>%
+              values_from = c(estimate, r.squared, AIC)) %>%
   mutate(
     func = "exp"
   ) %>%
   rename(
     'r_squared' = 'r.squared_a',
+    'AIC' = 'AIC_a',
     'a' = 'estimate_a',
     'b' = 'estimate_b'
   ) %>%
-  select(-r.squared_b)
+  select(-r.squared_b, -AIC_b)
+
+# replace terms for clarity
+# and back-convert parameters from their linear form
+lin <- lin %>%
+  mutate(
+    term = ifelse(grepl("uitloging",term),"b","a"),
+  ) %>%
+  select(proef, set, term, estimate, r.squared, AIC) %>%
+  pivot_wider(names_from = c(term),
+              values_from = c(estimate, r.squared, AIC)) %>%
+  mutate(
+    func = "lin"
+  ) %>%
+  rename(
+    'r_squared' = 'r.squared_a',
+    'AIC' = 'AIC_a',
+    'a' = 'estimate_a',
+    'b' = 'estimate_b'
+  ) %>%
+  select(-r.squared_b, -AIC_b)
+
+# get the best model based upon the AIC
+# smallest value (model first listed)
+aic_test <- bind_rows(power, exp, lin) %>%
+  mutate(
+    proef = ifelse(is.na(proef),"KP + SP", proef),
+    results = round(
+      ifelse(func == "power",
+           a * 4.5 ^ b,
+           ifelse(func == "exp",
+                  a * exp(4.5 * b),
+                  a + (4.5 * b))
+                  )
+    )
+  )
 
 # bind the final parameters in a nice table
 # clean up for reporting mainly relabelling
@@ -190,6 +247,7 @@ parameters_diff <- parameters_diff %>%
     b_diff = b.x - b.y,
     r_squared_diff = r_squared.x - r_squared.y
   ) %>%
+  select(-AIC) %>%
   select(-c(ends_with(".y"))) %>%
   select(-c(ends_with(".x"))) %>%
   relocate(func, .after = r_squared_diff)
@@ -209,24 +267,28 @@ parameters_rots$efsa_2020_conc <- 0.02
 # apply the models with fitted parameters
 # to these standards, return in place
 # (overwriting standard values)
-parameters <- parameters %>%
+parameters_results <- parameters %>%
+  pivot_longer(
+    cols = contains("_conc"),
+    values_to = "concentration",
+    names_to = "standard") %>%
   mutate(
-    across(ends_with("_conc"),
-    ~ round(
+    results = round(
       ifelse(func == "power",
-             a * .x ^ b,
-             a * exp(.x * b))
+             a * concentration ^ b,
+             a * exp(concentration * b))
       )
-    )
   )
 
-parameters_rots <- parameters_rots %>%
+parameters_rots_results <- parameters_rots %>%
+  pivot_longer(
+    cols = contains("_conc"),
+    values_to = "concentration",
+    names_to = "standard") %>%
   mutate(
-    across(ends_with("_conc"),
-           ~ round(
-             ifelse(func == "power",
-                    a * .x ^ b,
-                    a * exp(.x * b))
-           )
+    results = round(
+      ifelse(func == "power",
+             a * concentration ^ b,
+             a * exp(concentration * b))
     )
   )
